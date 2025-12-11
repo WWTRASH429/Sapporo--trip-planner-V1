@@ -1,0 +1,1020 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0ea5e9">
+  <title>Sapporo Winter Trip Planner</title>
+
+  <!-- Tailwind CSS (CDN) -->
+  https://cdn.tailwindcss.com</script>
+  <script>
+    // Tailwind theme: Sapporo winter white & blue
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            winter: {
+              50:  '#f5fbff',
+              100: '#e9f6ff',
+              200: '#d0ecff',
+              300: '#a8dcff',
+              400: '#70c7ff',
+              500: '#38b5f5', // primary sky-blue
+              600: '#1f95d1',
+              700: '#1676a8',
+              800: '#125f86',
+              900: '#104e6e'
+            }
+          },
+          boxShadow: {
+            card: '0 10px 25px -5px rgba(16,78,110,0.2), 0 10px 10px -5px rgba(16,78,110,0.1)'
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Vue 3 (CDN) -->
+  https://unpkg.com/vue@3/dist/vue.global.prod.js</script>
+  <!-- Chart.js for pie chart -->
+  https://cdn.jsdelivr.net/npm/chart.js</script>
+
+  <style>
+    /* iOS-like touch target & smooth scrolling */
+    html, body { height: 100%; background: #f5fbff; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: #a8dcff; border-radius: 8px; }
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+    .safe-top { padding-top: env(safe-area-inset-top); }
+  </style>
+</head>
+<body class="min-h-screen bg-gradient-to-b from-winter-100 to-white text-winter-900">
+
+  <div id="app" class="min-h-screen flex flex-col">
+
+    <!-- Top App Bar -->
+    <header class="safe-top bg-gradient-to-r from-winter-500 to-winter-700 text-white shadow-md">
+      <div class="max-w-md mx-auto px-4 py-3 flex items-center justify-between">
+        <h1 class="text-lg font-semibold">Sapporo Trip Planner</h1>
+        <div class="text-sm opacity-90">❄️ White & Blue</div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 max-w-md w-full mx-auto px-3 py-3 pb-28 space-y-4">
+      <!-- Tabs -->
+      <nav class="flex gap-2">
+        <button
+          v-for="tab in tabs"
+          :key="tab.key"
+          @click="activeTab = tab.key"
+          class="flex-1 rounded-xl py-2 text-sm font-medium transition
+                 border"
+          :class="activeTab === tab.key
+                  ? 'bg-winter-500 text-white border-winter-600 shadow-card'
+                  : 'bg-white text-winter-800 border-winter-200 hover:border-winter-300'">
+          {{ tab.label }}
+        </button>
+      </nav>
+
+      <!-- SCHEDULE -->
+      <section v-show="activeTab==='schedule'" class="bg-white rounded-2xl shadow-card p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-semibold">Schedule</h2>
+          <div class="text-xs text-winter-700">30‑min slots • iOS-like</div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <div>
+            <label class="text-xs text-winter-700">Date</label>
+            <input type="date" v-model="schedule.date"
+                   class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500" />
+          </div>
+          <div>
+            <label class="text-xs text-winter-700">Start Time</label>
+            <select v-model="schedule.newEvent.start"
+                    class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500">
+              <option v-for="slot in timeSlots" :value="slot">{{ slot }}</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2 mb-3">
+          <div>
+            <label class="text-xs text-winter-700">Duration</label>
+            <select v-model.number="schedule.newEvent.durationMins"
+                    class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500">
+              <option :value="30">30 mins</option>
+              <option :value="60">1 hour</option>
+              <option :value="90">1.5 hours</option>
+              <option :value="120">2 hours</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs text-winter-700">Title</label>
+            <input type="text" v-model="schedule.newEvent.title" placeholder="e.g. Snow Festival"
+                   class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500" />
+          </div>
+        </div>
+
+        <div class="flex gap-2">
+          <button @click="addEvent"
+                  class="flex-1 rounded-xl bg-winter-600 text-white py-2 font-medium hover:bg-winter-700">
+            Add Event
+          </button>
+          <button @click="clearDayEvents"
+                  class="rounded-xl bg-winter-100 text-winter-800 py-2 px-3 font-medium border border-winter-200 hover:bg-winter-200">
+            Clear Day
+          </button>
+        </div>
+
+        <hr class="my-4 border-winter-100"/>
+
+        <h3 class="text-sm font-semibold mb-2">Events ({{ formatDate(schedule.date) }})</h3>
+        <div v-if="dayEvents.length === 0" class="text-sm text-winter-700">
+          No events yet. Tap a slot to add.
+        </div>
+        <ul class="space-y-2">
+          <li v-for="(ev, idx) in dayEvents" :key="ev.id"
+              class="rounded-xl border border-winter-200 bg-winter-50 p-3 flex items-center justify-between">
+            <div>
+              <div class="font-medium">{{ ev.title }}</div>
+              <div class="text-xs text-winner-700">
+                {{ ev.start }} → {{ ev.end }}
+              </div>
+            </div>
+            <button @click="removeEvent(ev.id)"
+                    class="text-xs rounded-lg bg-white border border-winter-300 px-2 py-1 hover:bg-winter-100">
+              Delete
+            </button>
+          </li>
+        </ul>
+
+        <hr class="my-4 border-winter-100"/>
+
+        <h3 class="text-sm font-semibold mb-2">Slots</h3>
+        <div class="grid grid-cols-3 gap-2">
+          <button v-for="slot in timeSlots"
+                  :key="slot"
+                  @click="schedule.newEvent.start = slot"
+                  class="rounded-lg py-2 text-sm border transition"
+                  :class="isSlotOccupied(slot) ? 'bg-winter-200 text-winter-900 border-winter-300' :
+                                                 'bg-white text-winter-800 border-winter-200 hover:bg-winter-50'">
+            {{ slot }}
+          </button>
+        </div>
+      </section>
+
+      <!-- MAP -->
+      <section v-show="activeTab==='map'" class="bg-white rounded-2xl shadow-card p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-semibold">Map & Pins</h2>
+          <div class="text-xs text-winter-700">Google Maps deep links</div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-2 mb-3">
+          <div>
+            <label class="text-xs text-winter-700">Place Name</label>
+            <input type="text" v-model="map.newPin.name" placeholder="e.g. Sapporo TV Tower"
+                   class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+          </div>
+          <div>
+            <label class="text-xs text-winter-700">Search Query / Address</label>
+            <input type="text" v-model="map.newPin.query" placeholder="e.g. Odori Park, Sapporo"
+                   class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-xs text-winter-700">Category</label>
+              <select v-model="map.newPin.category"
+                      class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500">
+                <option>Sights</option>
+                <option>Food</option>
+                <option>Shopping</option>
+                <option>Commute</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-winter-700">Notes</label>
+              <input type="text" v-model="map.newPin.notes" placeholder="e.g. View at sunset"
+                     class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-2 mb-3">
+          <button @click="addPin"
+                  class="flex-1 rounded-xl bg-winter-600 text-white py-2 font-medium hover:bg-winter-700">
+            Add Pin
+          </button>
+          <button @click="clearPins"
+                  class="rounded-xl bg-winter-100 text-winter-800 py-2 px-3 font-medium border border-winter-200 hover:bg-winter-200">
+            Clear
+          </button>
+        </div>
+
+        <div v-if="map.pins.length === 0" class="text-sm text-winter-700">
+          No pins yet. Add your first place!
+        </div>
+        <ul class="space-y-3">
+          <li v-for="pin in map.pins" :key="pin.id"
+              class="rounded-xl border border-winter-200 bg-winter-50 p-3">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-medium">{{ pin.name }}</div>
+                <div class="text-xs text-winter-700">{{ pin.category }} • {{ pin.notes }}</div>
+              </div>
+              <button @click="removePin(pin.id)"
+                      class="text-xs rounded-lg bg-white border border-winter-300 px-2 py-1 hover:bg-winter-100">
+                Delete
+              </button>
+            </div>
+            <div class="mt-2 grid grid-cols-2 gap-2">
+              mapsSearchUrl(pin)
+                 Open in Google Maps
+              </a>
+              mapsDirectionsUrl(pin)
+                 Pilot (Walking)
+              </a>
+            </div>
+          </li>
+        </ul>
+
+        <p class="mt-4 text-xs text-winter-700">
+          Tip: Opening links in the Google Maps app uses your signed-in account automatically.
+          True “auto-sync” to Saved/My Maps requires Google OAuth + Maps Platform APIs (backend needed).
+        </p>
+      </section>
+
+      <!-- BUDGET -->
+      <section v-show="activeTab==='budget'" class="bg-white rounded-2xl shadow-card p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-semibold">Budget Control</h2>
+          <button @click="budget.showSettings = !budget.showSettings"
+                  class="text-xs rounded-lg bg-winter-100 text-winter-900 border border-winter-200 px-2 py-1 hover:bg-winter-200">
+            Settings
+          </button>
+        </div>
+
+        <!-- Settings -->
+        <div v-if="budget.showSettings" class="rounded-xl border border-winter-200 bg-winter-50 p-3 mb-3">
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-xs text-winter-700">Budget (HKD)</label>
+              <input type="number" v-model.number="budget.limitHKD" min="0"
+                     class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+            </div>
+            <div>
+              <label class="text-xs text-winter-700">Exchange Rate (JPY per HKD)</label>
+              <input type="number" v-model.number="budget.rateJPYperHKD" step="0.01" min="0"
+                     class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+            </div>
+          </div>
+          <div class="text-xs text-winter-700 mt-2">
+            Current: 1 HKD = {{ budget.rateJPYperHKD.toFixed(2) }} JPY
+            (editable)
+          </div>
+        </div>
+
+        <!-- Add Spending -->
+        <div class="grid grid-cols-1 gap-2 mb-3">
+          <div>
+            <label class="text-xs text-winter-700">Description</label>
+            <input type="text" v-model="budget.newItem.desc" placeholder="e.g. Ramen lunch"
+                   class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-xs text-winter-700">Amount (HKD)</label>
+              <input type="number" v-model.number="budget.newItem.hkd" min="0" @input="syncJPYFromHKD"
+                     class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+            </div>
+            <div>
+              <label class="text-xs text-winter-700">Amount (JPY)</label>
+              <input type="number" v-model.number="budget.newItem.jpy" min="0" @input="syncHKDFromJPY"
+                     class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label class="text-xs text-winter-700">Category</label>
+              <select v-model="budget.newItem.category"
+                      class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500">
+                <option>Commute</option>
+                <option>Food</option>
+                <option>Shopping</option>
+                <option>Tourist Point</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-winter-700">Payment Method</label>
+              <select v-model="budget.newItem.method"
+                      class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500">
+                <option>Cash</option>
+                <option>Credit Card</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-xs text-winter-700">Beneficiaries</label>
+              <select v-model="budget.newItem.beneficiaries"
+                      class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500">
+                <option>Both</option>
+                <option>Ariel</option>
+                <option>Wilken</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label class="text-xs text-winter-700">Paid by</label>
+              <select v-model="budget.newItem.paidBy"
+                      class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500">
+                <option>Ariel</option>
+                <option>Wilken</option>
+                <option>Both (mixed)</option>
+              </select>
+            </div>
+            <div v-if="budget.newItem.paidBy==='Both (mixed)'" class="col-span-2">
+              <label class="text-xs text-winter-700">Split (HKD)</label>
+              <div class="grid grid-cols-2 gap-2">
+                <input type="number" v-model.number="budget.newItem.splitHKD.Ariel" min="0" placeholder="Ariel"
+                       class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+                <input type="number" v-model.number="budget.newItem.splitHKD.Wilken" min="0" placeholder="Wilken"
+                       class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+              </div>
+              <div class="text-xs text-winter-700 mt-1">Leave blanks to auto-half split based on HKD amount.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-2">
+          <button @click="addSpending"
+                  class="flex-1 rounded-xl bg-winter-600 text-white py-2 font-medium hover:bg-winter-700">
+            Add Spending
+          </button>
+          <button @click="clearSpendings"
+                  class="rounded-xl bg-winter-100 text-winter-800 py-2 px-3 font-medium border border-winter-200 hover:bg-winter-200">
+            Clear
+          </button>
+        </div>
+
+        <hr class="my-4 border-winter-100"/>
+
+        <!-- Dashboard -->
+        <div class="grid grid-cols-1 gap-3">
+          <div class="rounded-xl border border-winter-200 bg-winter-50 p-3">
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              <div><span class="font-medium">Total:</span> {{ formatHKD(totalHKD) }} ({{ formatJPY(totalJPY) }})</div>
+              <div><span class="font-medium">Budget Remain:</span> {{ formatHKD(remainingHKD) }} ({{ formatJPY(remainingJPY) }})</div>
+              <div><span class="font-medium">Paid by Ariel:</span> {{ formatHKD(totalPaid.Ariel) }}</div>
+              <div><span class="font-medium">Paid by Wilken:</span> {{ formatHKD(totalPaid.Wilken) }}</div>
+              <div><span class="font-medium">Paid (mixed):</span> {{ formatHKD(totalPaid.Mixed) }}</div>
+              <div><span class="font-medium">Fair share Ariel:</span> {{ formatHKD(fairShare.Ariel) }}</div>
+              <div><span class="font-medium">Fair share Wilken:</span> {{ formatHKD(fairShare.Wilken) }}</div>
+              <div class="col-span-2">
+                <span class="font-medium">Settlement:</span>
+                <span v-if="settlement.WilkenToAriel > 0">
+                  Wilken → Ariel: {{ formatHKD(settlement.WilkenToAriel) }}
+                </span>
+                <span v-else-if="settlement.ArielToWilken > 0">
+                  Ariel → Wilken: {{ formatHKD(settlement.ArielToWilken) }}
+                </span>
+                <span v-else>All settled.</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-winter-200 bg-white p-3">
+            <h3 class="text-sm font-semibold mb-2">Spending by Category</h3>
+            <canvas id="categoryChart" height="160"></canvas>
+          </div>
+        </div>
+
+        <hr class="my-4 border-winter-100"/>
+
+        <!-- List -->
+        <ul class="space-y-2">
+          <li v-for="(sp, idx) in budget.items" :key="sp.id"
+              class="rounded-xl border border-winter-200 bg-winter-50 p-3">
+            <div class="flex items-center justify-between">
+              <div class="font-medium">{{ sp.desc }}</div>
+              <button @click="removeSpending(sp.id)"
+                      class="text-xs rounded-lg bg-white border border-winter-300 px-2 py-1 hover:bg-winter-100">
+                Delete
+              </button>
+            </div>
+            <div class="text-xs text-winter-700 mt-1">
+              {{ sp.category }} • {{ sp.method }} • Beneficiaries: {{ sp.beneficiaries }}<br/>
+              Amount: {{ formatHKD(sp.hkd) }} ({{ formatJPY(sp.jpy) }}) • Paid by: {{ sp.paidBy }}
+              <span v-if="sp.paidBy==='Both (mixed)'">
+                (Ariel {{ formatHKD(sp.splitHKD.Ariel) }}, Wilken {{ formatHKD(sp.splitHKD.Wilken) }})
+              </span>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <!-- SHOP LIST -->
+      <section v-show="activeTab==='shop'" class="bg-white rounded-2xl shadow-card p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-semibold">Shop List</h2>
+          <div class="text-xs text-winter-700">Items + photo + checkbox</div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-2 mb-3">
+          <div>
+            <label class="text-xs text-winter-700">Item</label>
+            <input type="text" v-model="shop.newItem.text" placeholder="e.g. Snow boots"
+                   class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <label class="text-xs text-winter-700">Where</label>
+              <input type="text" v-model="shop.newItem.where" placeholder="e.g. Tanukikoji"
+                     class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+            </div>
+            <div>
+              <label class="text-xs text-winter-700">Price (optional)</label>
+              <input type="number" v-model.number="shop.newItem.price" min="0"
+                     class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+            </div>
+          </div>
+          <div>
+            <label class="text-xs text-winter-700">Attach Photo (optional)</label>
+            <input type="file" accept="image/*" @change="onShopPhotoUpload"
+                   class="mt-1 w-full rounded-lg border border-winter-200"/>
+          </div>
+        </div>
+
+        <div class="flex gap-2">
+          <button @click="addShopItem"
+                  class="flex-1 rounded-xl bg-winter-600 text-white py-2 font-medium hover:bg-winter-700">
+            Add Item
+          </button>
+          <button @click="clearShop"
+                  class="rounded-xl bg-winter-100 text-winter-800 py-2 px-3 font-medium border border-winter-200 hover:bg-winter-200">
+            Clear
+          </button>
+        </div>
+
+        <hr class="my-4 border-winter-100"/>
+
+        <ul class="space-y-2">
+          <li v-for="it in shop.items" :key="it.id"
+              class="rounded-xl border border-winter-200 bg-winter-50 p-3">
+            <div class="flex items-center justify-between">
+              <label class="flex items-center gap-2">
+                <input type="checkbox" v-model="it.checked" class="rounded"/>
+                <span class="font-medium" :class="it.checked ? 'line-through text-winter-700' : ''">{{ it.text }}</span>
+              </label>
+              <button @click="removeShopItem(it.id)"
+                      class="text-xs rounded-lg bg-white border border-winter-300 px-2 py-1 hover:bg-winter-100">
+                Delete
+              </button>
+            </div>
+            <div class="text-xs text-winter-700 mt-1">
+              {{ it.where }} <span v-if="it.price">• {{ formatHKD(it.price) }}</span>
+            </div>
+            <div v-if="it.photo" class="mt-2">
+              it.photo
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <!-- PACK LIST -->
+      <section v-show="activeTab==='pack'" class="bg-white rounded-2xl shadow-card p-4">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-base font-semibold">Pack List</h2>
+          <div class="text-xs text-winter-700">By person + checkbox</div>
+        </div>
+
+        <div class="grid grid-cols-1 gap-2 mb-3">
+          <div>
+            <label class="text-xs text-winter-700">Item</label>
+            <input type="text" v-model="pack.newItem.text" placeholder="e.g. Heat packs"
+                   class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500"/>
+          </div>
+          <div>
+            <label class="text-xs text-winter-700">Who</label>
+            <select v-model="pack.newItem.who"
+                    class="mt-1 w-full rounded-lg border border-winter-200 focus:ring-winter-500 focus:border-winter-500">
+              <option>Ariel</option>
+              <option>Wilken</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex gap-2">
+          <button @click="addPackItem"
+                  class="flex-1 rounded-xl bg-winter-600 text-white py-2 font-medium hover:bg-winter-700">
+            Add Item
+          </button>
+          <button @click="clearPack"
+                  class="rounded-xl bg-winter-100 text-winter-800 py-2 px-3 font-medium border border-winter-200 hover:bg-winter-200">
+            Clear
+          </button>
+        </div>
+
+        <hr class="my-4 border-winter-100"/>
+
+        <ul class="space-y-2">
+          <li v-for="it in pack.items" :key="it.id"
+              class="rounded-xl border border-winter-200 bg-winter-50 p-3">
+            <div class="flex items-center justify-between">
+              <label class="flex items-center gap-2">
+                <input type="checkbox" v-model="it.checked" class="rounded"/>
+                <span class="font-medium" :class="it.checked ? 'line-through text-winter-700' : ''">{{ it.text }}</span>
+              </label>
+              <span class="text-xs rounded-lg bg-white border border-winter-300 px-2 py-1">{{ it.who }}</span>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <!-- Export / Import -->
+      <section class="bg-white rounded-2xl shadow-card p-4">
+        <h2 class="text-base font-semibold mb-2">Data</h2>
+        <div class="grid grid-cols-2 gap-2">
+          <button @click="exportJSON"
+                  class="rounded-xl bg-white border border-winter-300 py-2 text-sm hover:bg-winter-100">
+            Export JSON
+          </button>
+          <label class="rounded-xl bg-white border border-winter-300 py-2 text-sm text-center hover:bg-winter-100 cursor-pointer">
+            Import JSON
+            <input type="file" accept="application/json" @change="importJSON" class="hidden"/>
+          </label>
+        </div>
+        <p class="text-xs text-winter-700 mt-2">Data is auto-saved to your browser (localStorage).</p>
+      </section>
+    </main>
+
+    <!-- Bottom Tab Bar -->
+    <footer class="safe-bottom fixed bottom-0 left-0 right-0 bg-white/90 backdrop-blur border-t border-winter-200">
+      <div class="max-w-md mx-auto px-4 py-2 grid grid-cols-5 gap-1 text-xs">
+        <button v-for="tab in tabs" :key="'b-'+tab.key"
+                @click="activeTab = tab.key"
+                class="px-2 py-1 rounded-lg transition"
+                :class="activeTab === tab.key ? 'bg-winter-500 text-white' : 'text-winter-800 hover:bg-winter-100'">
+          {{ tab.short }}
+        </button>
+      </div>
+    </footer>
+
+  </div>
+
+  <script>
+    const { createApp, computed, watch } = Vue;
+
+    createApp({
+      data() {
+        return {
+          activeTab: 'schedule',
+          tabs: [
+            { key: 'schedule', label: 'Schedule', short: 'Sched' },
+            { key: 'map',      label: 'Map',      short: 'Map'   },
+            { key: 'budget',   label: 'Budget',   short: 'Budget'},
+            { key: 'shop',     label: 'Shop List',short: 'Shop'  },
+            { key: 'pack',     label: 'Pack List',short: 'Pack'  },
+          ],
+
+          // Schedule
+          schedule: {
+            date: this.todayStr(),
+            newEvent: { start: '09:00', durationMins: 60, title: '' },
+            eventsByDate: {} // { 'YYYY-MM-DD': [{id,start,end,title}] }
+          },
+
+          // Map
+          map: {
+            newPin: { name: '', query: '', category: 'Sights', notes: '' },
+            pins: [] // {id,name,query,category,notes}
+          },
+
+          // Budget
+          budget: {
+            showSettings: false,
+            rateJPYperHKD: 18.00,
+            limitHKD: 5000,
+            newItem: {
+              desc: '',
+              hkd: null,
+              jpy: null,
+              category: 'Food',
+              method: 'Cash',
+              beneficiaries: 'Both',
+              paidBy: 'Ariel',
+              splitHKD: { Ariel: null, Wilken: null }
+            },
+            items: [] // {id,desc,hkd,jpy,category,method,beneficiaries,paidBy,splitHKD}
+          },
+
+          // Shop
+          shop: {
+            newItem: { text: '', where: '', price: null, photo: null },
+            items: [] // {id,text,where,price,photo,checked}
+          },
+
+          // Pack
+          pack: {
+            newItem: { text: '', who: 'Ariel' },
+            items: [] // {id,text,who,checked}
+          },
+
+          chart: null
+        }
+      },
+
+      computed: {
+        timeSlots() {
+          // 06:00 to 23:30 in 30-min increments
+          const slots = [];
+          for (let h = 6; h <= 23; h++) {
+            slots.push(`${String(h).padStart(2,'0')}:00`);
+            if (h !== 23) slots.push(`${String(h).padStart(2,'0')}:30`);
+          }
+          return slots;
+        },
+        dayEvents() {
+          const list = this.schedule.eventsByDate[this.schedule.date] || [];
+          // sort by start time
+          return list.slice().sort((a,b) => a.start.localeCompare(b.start));
+        },
+
+        // Budget totals
+        totalHKD() {
+          return this.budget.items.reduce((sum, x) => sum + (x.hkd || 0), 0);
+        },
+        totalJPY() {
+          return this.totalHKD * this.budget.rateJPYperHKD;
+        },
+        remainingHKD() {
+          return Math.max(0, (this.budget.limitHKD || 0) - this.totalHKD);
+        },
+        remainingJPY() {
+          return this.remainingHKD * this.budget.rateJPYperHKD;
+        },
+
+        totalPaid() {
+          let Ariel = 0, Wilken = 0, Mixed = 0;
+          for (const x of this.budget.items) {
+            if (x.paidBy === 'Ariel') Ariel += x.hkd || 0;
+            else if (x.paidBy === 'Wilken') Wilken += x.hkd || 0;
+            else Mixed += (x.hkd || 0);
+          }
+          return { Ariel, Wilken, Mixed };
+        },
+
+        // Fair share: Only count items with beneficiaries='Both'; otherwise, full amount to beneficiary.
+        fairShare() {
+          let arielOwes = 0, wilkenOwes = 0;
+          for (const x of this.budget.items) {
+            const amt = x.hkd || 0;
+            if (x.beneficiaries === 'Both') {
+              arielOwes += amt / 2;
+              wilkenOwes += amt / 2;
+            } else if (x.beneficiaries === 'Ariel') {
+              arielOwes += amt;
+            } else if (x.beneficiaries === 'Wilken') {
+              wilkenOwes += amt;
+            }
+          }
+          return { Ariel: arielOwes, Wilken: wilkenOwes };
+        },
+
+        settlement() {
+          // What each actually paid (including mixed splits)
+          let arielPaid = 0, wilkenPaid = 0;
+          for (const x of this.budget.items) {
+            if (x.paidBy === 'Ariel') arielPaid += x.hkd || 0;
+            else if (x.paidBy === 'Wilken') wilkenPaid += x.hkd || 0;
+            else {
+              // Both (mixed): use split; if absent, assume half-half
+              const total = x.hkd || 0;
+              const a = (x.splitHKD?.Ariel ?? total/2);
+              const w = (x.splitHKD?.Wilken ?? total/2);
+              arielPaid += a;
+              wilkenPaid += w;
+            }
+          }
+          const arielFair = this.fairShare.Ariel;
+          const wilkenFair = this.fairShare.Wilken;
+          const arielDelta = arielPaid - arielFair;   // + means Ariel overpaid
+          const wilkenDelta = wilkenPaid - wilkenFair;// + means Wilken overpaid
+
+          if (arielDelta > 0 && wilkenDelta < 0) {
+            // Wilken owes Ariel
+            const amount = Math.min(arielDelta, -wilkenDelta);
+            return { WilkenToAriel: amount, ArielToWilken: 0 };
+          } else if (wilkenDelta > 0 && arielDelta < 0) {
+            // Ariel owes Wilken
+            const amount = Math.min(wilkenDelta, -arielDelta);
+            return { WilkenToAriel: 0, ArielToWilken: amount };
+          } else {
+            return { WilkenToAriel: 0, ArielToWilken: 0 };
+          }
+        }
+      },
+
+      methods: {
+        // Helpers
+        todayStr() {
+          const d = new Date();
+          return d.toISOString().slice(0,10);
+        },
+        formatDate(s) {
+          if (!s) return '';
+          const d = new Date(s);
+          return d.toLocaleDateString();
+        },
+        formatHKD(v) { return `HKD ${Number(v||0).toFixed(2)}`; }
+        ,
+        formatJPY(v) { return `JPY ${Number(v||0).toFixed(0)}`; },
+
+        // Schedule
+        addEvent() {
+          const { start, durationMins, title } = this.schedule.newEvent;
+          if (!title) return alert('Please enter a title.');
+          const end = this.addMinutes(start, durationMins);
+          const ev = { id: crypto.randomUUID(), start, end, title };
+          const date = this.schedule.date;
+          const list = this.schedule.eventsByDate[date] || [];
+          list.push(ev);
+          this.schedule.eventsByDate[date] = list;
+          this.save();
+          this.schedule.newEvent.title = '';
+        },
+        clearDayEvents() {
+          this.schedule.eventsByDate[this.schedule.date] = [];
+          this.save();
+        },
+        removeEvent(id) {
+          const date = this.schedule.date;
+          const list = this.schedule.eventsByDate[date] || [];
+          this.schedule.eventsByDate[date] = list.filter(x => x.id !== id);
+          this.save();
+        },
+        addMinutes(timeStr, mins) {
+          const [h,m] = timeStr.split(':').map(Number);
+          const base = new Date(0,0,0,h,m);
+          const end = new Date(base.getTime() + mins*60000);
+          return `${String(end.getHours()).padStart(2,'0')}:${String(end.getMinutes()).padStart(2,'0')}`;
+        },
+        isSlotOccupied(slot) {
+          return this.dayEvents.some(ev => slot >= ev.start && slot < ev.end);
+        },
+
+        // Map
+        addPin() {
+          const { name, query } = this.map.newPin;
+          if (!name || !query) return alert('Enter name and query.');
+          this.map.pins.push({ id: crypto.randomUUID(), ...this.map.newPin });
+          this.map.newPin = { name: '', query: '', category: 'Sights', notes: '' };
+          this.save();
+        },
+        removePin(id) {
+          this.map.pins = this.map.pins.filter(p => p.id !== id);
+          this.save();
+        },
+        clearPins() {
+          this.map.pins = [];
+          this.save();
+        },
+        mapsSearchUrl(pin) {
+          const q = encodeURIComponent(pin.query || pin.name);
+          return `https://www.google.com/maps/search/?api=1&query=${q}`;
+        },
+        mapsDirectionsUrl(pin) {
+          const dest = encodeURIComponent(pin.query || pin.name);
+          return `https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=walking`;
+        },
+
+        // Budget
+        syncJPYFromHKD() {
+          const h = Number(this.budget.newItem.hkd || 0);
+          this.budget.newItem.jpy = h * this.budget.rateJPYperHKD;
+        },
+        syncHKDFromJPY() {
+          const j = Number(this.budget.newItem.jpy || 0);
+          const rate = this.budget.rateJPYperHKD || 1;
+          this.budget.newItem.hkd = j / rate;
+        },
+        addSpending() {
+          const x = this.budget.newItem;
+          if (!x.desc) return alert('Enter a description.');
+          const hkd = Number(x.hkd || 0);
+          const jpy = Number(x.jpy || (hkd * this.budget.rateJPYperHKD));
+          if (hkd <= 0) return alert('Enter a positive amount (HKD or JPY).');
+
+          // Normalize split for mixed payments
+          let splitHKD = { Ariel: null, Wilken: null };
+          if (x.paidBy === 'Both (mixed)') {
+            const a = Number(x.splitHKD.Ariel ?? NaN);
+            const w = Number(x.splitHKD.Wilken ?? NaN);
+            if (isNaN(a) && isNaN(w)) {
+              splitHKD = { Ariel: hkd/2, Wilken: hkd/2 };
+            } else {
+              const sum = (isNaN(a)?0:a) + (isNaN(w)?0:w);
+              if (sum !== hkd) {
+                // If user entered only one side, infer the other
+                splitHKD = {
+                  Ariel: isNaN(a) ? hkd - (isNaN(w)?0:w) : a,
+                  Wilken: isNaN(w) ? hkd - (isNaN(a)?0:a) : w
+                };
+              } else {
+                splitHKD = { Ariel: a, Wilken: w };
+              }
+            }
+          }
+
+          this.budget.items.push({
+            id: crypto.randomUUID(),
+            desc: x.desc,
+            hkd, jpy,
+            category: x.category,
+            method: x.method,
+            beneficiaries: x.beneficiaries,
+            paidBy: x.paidBy,
+            splitHKD
+          });
+          // reset form
+          this.budget.newItem = {
+            desc: '',
+            hkd: null,
+            jpy: null,
+            category: 'Food',
+            method: 'Cash',
+            beneficiaries: 'Both',
+            paidBy: 'Ariel',
+            splitHKD: { Ariel: null, Wilken: null }
+          };
+          this.save();
+          this.updateChart();
+        },
+        removeSpending(id) {
+          this.budget.items = this.budget.items.filter(x => x.id !== id);
+          this.save();
+          this.updateChart();
+        },
+        clearSpendings() {
+          this.budget.items = [];
+          this.save();
+          this.updateChart();
+        },
+
+        // Shop
+        onShopPhotoUpload(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => { this.shop.newItem.photo = reader.result; };
+          reader.readAsDataURL(file);
+        },
+        addShopItem() {
+          const it = this.shop.newItem;
+          if (!it.text) return alert('Enter item name.');
+          this.shop.items.push({
+            id: crypto.randomUUID(),
+            text: it.text, where: it.where, price: it.price, photo: it.photo, checked: false
+          });
+          this.shop.newItem = { text: '', where: '', price: null, photo: null };
+          this.save();
+        },
+        removeShopItem(id) {
+          this.shop.items = this.shop.items.filter(x => x.id !== id);
+          this.save();
+        },
+        clearShop() {
+          this.shop.items = [];
+          this.save();
+        },
+
+        // Pack
+        addPackItem() {
+          const it = this.pack.newItem;
+          if (!it.text) return alert('Enter item.');
+          this.pack.items.push({
+            id: crypto.randomUUID(),
+            text: it.text, who: it.who, checked: false
+          });
+          this.pack.newItem = { text: '', who: 'Ariel' };
+          this.save();
+        },
+        clearPack() {
+          this.pack.items = [];
+          this.save();
+        },
+
+        // Persistence
+        save() {
+          const payload = {
+            schedule: this.schedule,
+            map: this.map,
+            budget: this.budget,
+            shop: this.shop,
+            pack: this.pack
+          };
+          localStorage.setItem('sapporoTripPlanner', JSON.stringify(payload));
+        },
+        load() {
+          const raw = localStorage.getItem('sapporoTripPlanner');
+          if (!raw) return;
+          try {
+            const data = JSON.parse(raw);
+            if (data.schedule) this.schedule = data.schedule;
+            if (data.map)      this.map      = data.map;
+            if (data.budget)   this.budget   = data.budget;
+            if (data.shop)     this.shop     = data.shop;
+            if (data.pack)     this.pack     = data.pack;
+          } catch { /* ignore parse errors */ }
+        },
+
+        exportJSON() {
+          const blob = new Blob(
+            [localStorage.getItem('sapporoTripPlanner') || '{}'],
+            { type: 'application/json' }
+          );
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = 'sapporo-trip-data.json';
+          a.click();
+          URL.revokeObjectURL(url);
+        },
+        importJSON(e) {
+          const file = e.target.files[0];
+          if (!file) return;
+          const reader = new FileReader();
+          reader.onload = () => {
+            try {
+              const data = JSON.parse(reader.result);
+              localStorage.setItem('sapporoTripPlanner', JSON.stringify(data));
+              this.load();
+              this.updateChart();
+              alert('Imported successfully.');
+            } catch {
+              alert('Invalid JSON file.');
+            }
+          };
+          reader.readAsText(file);
+        },
+
+        // Chart
+        initChart() {
+          const ctx = document.getElementById('categoryChart');
+          if (!ctx) return;
+          this.chart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+              labels: ['Commute','Food','Shopping','Tourist Point'],
+              datasets: [{
+                label: 'Spending by category',
+                data: this.categoryTotals(),
+                backgroundColor: ['#a8dcff','#38b5f5','#1676a8','#70c7ff'],
+                borderColor: '#ffffff',
+                borderWidth: 2
+              }]
+            },
+            options: {
+              plugins: {
+                legend: { position: 'bottom' }
+              }
+            }
+          });
+        },
+        updateChart() {
+          if (!this.chart) return;
+          this.chart.data.datasets[0].data = this.categoryTotals();
+          this.chart.update();
+        },
+        categoryTotals() {
+          const cats = { Commute:0, Food:0, Shopping:0, 'Tourist Point':0 };
+          for (const x of this.budget.items) {
+            if (cats[x.category] !== undefined) cats[x.category] += x.hkd || 0;
+          }
+          return [cats.Commute, cats.Food, cats.Shopping, cats['Tourist Point']];
+        }
+      },
+
+      mounted() {
+        this.load();
+        this.$nextTick(() => {
+          this.initChart();
+          this.updateChart();
+        });
+
+        // Auto-save on changes
+        watch(() => this.schedule, () => this.save(), { deep: true });
+        watch(() => this.map,      () => this.save(), { deep: true });
+        watch(() => this.budget,   () => { this.save(); this.updateChart(); }, { deep: true });
+        watch(() => this.shop,     () => this.save(), { deep: true });
+        watch(() => this.pack,     () => this.save(), { deep: true });
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
